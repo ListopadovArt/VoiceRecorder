@@ -9,10 +9,6 @@
 import UIKit
 import AVFoundation
 
-protocol PlayTableViewCellDelegate: AnyObject {
-    func cellButtonCliked(buttonTappedFor audio: String )
-}
-
 class PlayTableViewCell: UITableViewCell {
     
     
@@ -28,18 +24,17 @@ class PlayTableViewCell: UITableViewCell {
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
-    lazy var progressView: UIProgressView = {
-        let view = UIProgressView(progressViewStyle: .bar)
-        view.trackTintColor = .darkGray
+    lazy var progressSlider: UISlider = {
+        let view = UISlider()
         view.tintColor = .white
         view.translatesAutoresizingMaskIntoConstraints = false
+        view.addTarget(self, action: #selector(timeSliderChanged), for: .valueChanged)
         return view
     }()
     
     var player: AVAudioPlayer!
-    weak var delegate: PlayTableViewCellDelegate?
     var audio: String!
-    
+    var timer: Timer?
     
     // MARK: - Prime functions
     override func prepareForReuse() {
@@ -49,18 +44,21 @@ class PlayTableViewCell: UITableViewCell {
     
     override func awakeFromNib() {
         super.awakeFromNib()
+        selectionStyle = .none
+        
         contentView.addSubview(titleLabel)
         contentView.addSubview(playButton)
-        contentView.addSubview(progressView)
-        titleLabel.centerYAnchor.constraint(equalTo: playButton.centerYAnchor).isActive = true
-        titleLabel.centerXAnchor.constraint(equalTo: progressView.centerXAnchor).isActive = true
+        contentView.addSubview(progressSlider)
+        
+        titleLabel.topAnchor.constraint(equalTo: playButton.topAnchor).isActive = true
+        titleLabel.centerXAnchor.constraint(equalTo: progressSlider.centerXAnchor).isActive = true
         playButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor).isActive = true
         playButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10).isActive = true
         playButton.heightAnchor.constraint(equalToConstant: 50).isActive = true
         playButton.widthAnchor.constraint(equalToConstant: 50).isActive = true
-        progressView.leadingAnchor.constraint(equalTo: playButton.trailingAnchor, constant: 10).isActive = true
-        progressView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -10).isActive = true
-        progressView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 5).isActive = true
+        progressSlider.leadingAnchor.constraint(equalTo: playButton.trailingAnchor, constant: 10).isActive = true
+        progressSlider.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -10).isActive = true
+        progressSlider.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2).isActive = true
         playButton.setImage(#imageLiteral(resourceName: "play"), for: .normal)
         playButton.addTarget(self, action: #selector(play(sender:)), for: .touchUpInside)
     }
@@ -68,11 +66,38 @@ class PlayTableViewCell: UITableViewCell {
     func configure(with object: String) {
         self.titleLabel.text = "\(object)"
     }
-    
+}
+
+
+//MARK: - Actions
+extension PlayTableViewCell {
     @objc func play(sender: UIButton) {
-        if let audio = audio,
-           let delegate = delegate {
-            delegate.cellButtonCliked(buttonTappedFor: audio)
+        if let audio = audio {
+            do {
+                let audioDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+                let audioUrl = audioDirectory?.appendingPathComponent(audio)
+                let sound = try AVAudioPlayer(contentsOf: audioUrl!)
+                self.player = sound
+                sound.prepareToPlay()
+                progressSlider.value = 0.0
+                progressSlider.maximumValue = Float((player?.duration)!)
+                sound.play()
+                timer = Timer.scheduledTimer(timeInterval: 0.0001, target: self, selector: #selector(self.updateSlider), userInfo: nil, repeats: true)
+            } catch {
+                print("error loading file")
+            }
         }
+    }
+    
+    @objc func updateSlider(){
+        progressSlider.value = Float(player.currentTime)
+    }
+    
+    @objc func timeSliderChanged(sender: UISlider) {
+        guard let audioPlayer = player else {
+            return
+        }
+        audioPlayer.currentTime = Double(sender.value)
+        audioPlayer.play()
     }
 }
